@@ -29,6 +29,7 @@ def clickAndCrop(event, x, y, flags, param):
 parser = argparse.ArgumentParser(description='Background subtraction to use with Chroma key.')
 parser.add_argument('--ROI', type=int, help='Corners of the region of interests.', nargs=4, required=False);
 parser.add_argument('--colour', type=int, help='Replace the backbround with this RGB colour (0 0 0 is black, 255 255 255 is white), useful for chroma key.', nargs=3, required=False, default=[0, 255, 0]);
+parser.add_argument('--threshold', type=int, help='Threshold.', nargs=1, required=False, default=64);
 args = parser.parse_args()
 
 
@@ -88,11 +89,17 @@ ROI_background = None;
 
 background_colour = args.colour;
 
+threshold = 64;
+
 if not isinstance(args.ROI, NoneType):
-    ROI_corners = [(args.ROI[0], args.ROI[1]), (args.ROI[2], args.ROI[3])];
+    ROI_corners = [(min(args.ROI[0], args.ROI[2]), min(args.ROI[1], args.ROI[3])), (max(args.ROI[0], args.ROI[2]), max(args.ROI[1], args.ROI[3]))];
     cropping = False;
     update_ROI = True;
 
+if isinstance(args.threshold, int):
+    threshold = args.threshold;
+else:
+    threshold = args.threshold[0];
 
 
 while not end_loop:
@@ -106,7 +113,10 @@ while not end_loop:
         if isinstance(background_colour_image, NoneType):
             cv.namedWindow("frame", cv.WINDOW_AUTOSIZE);
             cv.setMouseCallback("frame", clickAndCrop);
-            cv.createTrackbar('Threshlod', 'frame', round(255 / 3.5), 255, nothing);
+            cv.createTrackbar('Threshlod', 'frame', threshold, 255, nothing);
+            cv.createTrackbar('R', 'frame', background_colour[0], 255, nothing);
+            cv.createTrackbar('G', 'frame', background_colour[1], 255, nothing);
+            cv.createTrackbar('B', 'frame', background_colour[2], 255, nothing);
 
             background_colour_image = np.zeros((frame.shape[0], frame.shape[1], 3), np.float);
             background_colour_image[:] = (background_colour[2] / 255, background_colour[1] / 255, background_colour[0] / 255);
@@ -117,7 +127,6 @@ while not end_loop:
             ROI_frame = frame;
 
         if not isinstance(background, NoneType):
-
             if isinstance(ROI_background, NoneType):
                 ROI_background = background;
 
@@ -130,7 +139,18 @@ while not end_loop:
                     background_colour_image = np.zeros((ROI_frame.shape[0], ROI_frame.shape[1], 3), np.float);
                     background_colour_image[:] = (background_colour[2] / 255, background_colour[1] / 255, background_colour[0] / 255);
 
+
+                if background_colour[0] / 255 != cv.getTrackbarPos('R','frame') / 255 or background_colour[1] / 255 != cv.getTrackbarPos('G','frame') / 255 or background_colour[2] / 255 != cv.getTrackbarPos('B','frame') / 255:
+
+                    background_colour[0] = cv.getTrackbarPos('R','frame');
+                    background_colour[1] = cv.getTrackbarPos('G','frame');
+                    background_colour[2] = cv.getTrackbarPos('B','frame');
+
+                    background_colour_image = np.zeros((ROI_frame.shape[0], ROI_frame.shape[1], 3), np.float);
+                    background_colour_image[:] = (background_colour[2] / 255, background_colour[1] / 255, background_colour[0] / 255);
+
                 if ROI_background.shape[0] == ROI_frame.shape[0] and ROI_background.shape[1] == ROI_frame.shape[1]:
+                    print(3)
 
                     diff = cv.absdiff(cv.pyrDown(cv.pyrDown(ROI_frame)), cv.pyrDown(cv.pyrDown(ROI_background)));
 
@@ -153,8 +173,11 @@ while not end_loop:
                     cv.imshow('chroma key', alpha3 * ROI_frame / (255) + (1-alpha3) * background_colour_image);
 
         keyboard = cv.waitKey(30)
-        if keyboard == 'b' or keyboard == ord('b'):
+        if keyboard == 'b' or keyboard == ord('b') or keyboard == 'r' or keyboard == ord('r'):
+            print("Get background");
+
             for i in range(tot_frame):
+                print(i, '/', tot_frame);
                 ret, temp = capture.read();
                 temp = temp.astype("float")
                 if i == 0:
@@ -167,8 +190,13 @@ while not end_loop:
 
             ROI_background = cv.GaussianBlur(background, (5,5),0);
 
+            if len(ROI_corners) == 2:
+                update_ROI = True;
+
         elif keyboard == 'q' or keyboard == ord('q') or keyboard == 27:
             end_loop = True;
+        elif keyboard != -1:
+            print("unknown key", keyboard)
 
         # Draw a rectangle around the region of interest
         if len(ROI_corners) == 2:
@@ -176,6 +204,9 @@ while not end_loop:
 
         cv.imshow("frame", frame)
 
+print("Threshold: ", cv.getTrackbarPos('Threshlod','frame'));
+print("Background colour: ", cv.getTrackbarPos('R','frame'), cv.getTrackbarPos('G','frame'), cv.getTrackbarPos('B','frame'));
+
 # Print the corners of the ROI
 if len(ROI_corners) == 2:
-    print("ROI:", ROI_corners);
+    print("ROI:", min(ROI_corners[0][0], ROI_corners[1][0]), min(ROI_corners[0][1], ROI_corners[1][1]), max(ROI_corners[0][0], ROI_corners[1][0]), max(ROI_corners[0][1], ROI_corners[1][1]));
